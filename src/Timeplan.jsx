@@ -214,6 +214,9 @@ export default function Timeplan() {
   const [tokenDraft, setTokenDraft] = useState("");
   const [sync, setSync] = useState({ state: "av", msg: "" });
   const gistIdRef = useRef("");
+  const lastSyncedRef = useRef("");
+  const conflictRef = useRef(false);
+  const [conflict, setConflict] = useState(null);
 
   const applyPayload = (s) => {
     if (!s) return;
@@ -258,6 +261,7 @@ export default function Timeplan() {
           String(remote.updatedAt || "") > String(local.updatedAt));
       applyPayload(nyereUte ? remote : local);
 
+      lastSyncedRef.current = (remote && remote.updatedAt) || "";
       setToken(t);
       setTokenDraft(t);
       if (t && remote)
@@ -296,14 +300,28 @@ export default function Timeplan() {
       } catch (e) {
         setStatus("Kunne ikke lagre lokalt. Prøv en endring til.");
       }
-      if (!token) return;
+      if (!token || conflictRef.current) return;
       setSync({ state: "arbeider", msg: "Lagrer til GitHub …" });
       try {
+        if (gistIdRef.current) {
+          const ute = await pullGist(token, gistIdRef.current);
+          const uteTid = String(ute.updatedAt || "");
+          if (uteTid && uteTid > String(lastSyncedRef.current || "")) {
+            conflictRef.current = true;
+            setConflict({ remote: ute, when: uteTid });
+            setSync({
+              state: "feil",
+              msg: "Endret på en annen enhet. Ikke lagret til GitHub.",
+            });
+            return;
+          }
+        }
         const id = await pushGist(token, gistIdRef.current, payload);
         if (id && id !== gistIdRef.current) {
           gistIdRef.current = id;
           writeLocal(GIST_KEY, id);
         }
+        lastSyncedRef.current = payload.updatedAt;
         setSync({ state: "ok", msg: "Sikkerhetskopiert " + klokke() });
       } catch (e) {
         setSync({ state: "feil", msg: e.message });
@@ -329,12 +347,46 @@ export default function Timeplan() {
     setSync({ state: "av", msg: "" });
   };
 
+  const brukEkstern = () => {
+    if (!conflict) return;
+    applyPayload(conflict.remote);
+    lastSyncedRef.current = conflict.when;
+    conflictRef.current = false;
+    setConflict(null);
+    setSync({ state: "ok", msg: "Hentet versjonen fra den andre enheten" });
+  };
+
+  const beholdMine = async () => {
+    if (!conflict) return;
+    conflictRef.current = false;
+    setConflict(null);
+    setSync({ state: "arbeider", msg: "Overskriver …" });
+    const payload = {
+      updatedAt: new Date().toISOString(),
+      config,
+      planOverrides,
+      actuals,
+      topics,
+      milestones,
+    };
+    try {
+      await pushGist(token, gistIdRef.current, payload);
+      lastSyncedRef.current = payload.updatedAt;
+      setSync({ state: "ok", msg: "Overskrev med dine timer " + klokke() });
+    } catch (e) {
+      setSync({ state: "feil", msg: e.message });
+    }
+  };
+
   const hentNa = async () => {
     if (!token || !gistIdRef.current) return;
     setSync({ state: "arbeider", msg: "Henter …" });
     try {
       const remote = await pullGist(token, gistIdRef.current);
       applyPayload(remote);
+      lastSyncedRef.current = remote.updatedAt || "";
+      conflictRef.current = false;
+      setConflict(null);
       setSync({ state: "ok", msg: "Hentet fra GitHub " + klokke() });
     } catch (e) {
       setSync({ state: "feil", msg: e.message });
@@ -567,6 +619,52 @@ export default function Timeplan() {
             </div>
           </div>
         </header>
+
+        {conflict && (
+          <section
+            className="p-4 mb-5"
+            style={{
+              background: "#FDF3F2",
+              border: `1px solid ${C.behind}`,
+              borderRadius: "4px",
+            }}
+          >
+            <h2 className="text-sm mb-1" style={{ color: C.behind }}>
+              Timelista ble endret på en annen enhet
+            </h2>
+            <p className="text-sm mb-3" style={{ color: C.ink }}>
+              Sikkerhetskopien på GitHub ble oppdatert{" "}
+              {new Date(conflict.when).toLocaleString("nb-NO", {
+                day: "numeric",
+                month: "short",
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
+              , etter at denne fanen ble åpnet. Endringene du har gjort her er
+              lagret lokalt, men ikke sendt til GitHub. Velg hvilken versjon som
+              skal gjelde.
+            </p>
+            <div className="flex flex-wrap gap-3">
+              <button
+                onClick={brukEkstern}
+                className="px-3 py-2 text-sm rounded"
+                style={{ border: `1px solid ${C.actual}`, color: C.actual }}
+              >
+                Bruk den andre enhetens versjon
+              </button>
+              <button
+                onClick={beholdMine}
+                className="px-3 py-2 text-sm rounded"
+                style={{ border: `1px solid ${C.behind}`, color: C.behind }}
+              >
+                Behold mine og overskriv
+              </button>
+            </div>
+            <p className="text-xs mt-3" style={{ color: C.muted }}>
+              Usikker? Last ned CSV først — da har du begge versjonene.
+            </p>
+          </section>
+        )}
 
         {/* diagram */}
         <section
