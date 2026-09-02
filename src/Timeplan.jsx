@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import {
   ComposedChart,
   Line,
@@ -28,6 +28,69 @@ const C = {
 };
 
 const STORAGE_KEY = "timeplan-prosjektoppgave-v1";
+
+/* ---------- sikkerhetskopi til privat GitHub Gist ---------- */
+const TOKEN_KEY = "timeplan-gist-token";
+const GIST_KEY = "timeplan-gist-id";
+const GIST_FILE = "timeplan.json";
+
+const readLocal = (k) => {
+  try {
+    return localStorage.getItem(k) || "";
+  } catch (e) {
+    return "";
+  }
+};
+const writeLocal = (k, v) => {
+  try {
+    if (v) localStorage.setItem(k, v);
+    else localStorage.removeItem(k);
+  } catch (e) {
+    /* lagring utilgjengelig */
+  }
+};
+
+async function ghFetch(path, token, options) {
+  const res = await fetch("https://api.github.com" + path, {
+    ...(options || {}),
+    headers: {
+      Authorization: "Bearer " + token,
+      Accept: "application/vnd.github+json",
+      "Content-Type": "application/json",
+    },
+  });
+  if (res.status === 401)
+    throw new Error("Tokenet ble avvist. Sjekk at det er gyldig og har gist-tilgang.");
+  if (res.status === 403)
+    throw new Error("GitHub avviste forespørselen. Mangler tokenet gist-tilgang?");
+  if (res.status === 404)
+    throw new Error("Fant ikke gisten. Koble fra og til igjen for å lage en ny.");
+  if (!res.ok) throw new Error("GitHub svarte " + res.status + ".");
+  return res.json();
+}
+
+async function pullGist(token, gistId) {
+  const g = await ghFetch("/gists/" + gistId, token);
+  const f = g.files && g.files[GIST_FILE];
+  if (!f) throw new Error("Gisten mangler filen " + GIST_FILE + ".");
+  const raw = f.truncated ? await (await fetch(f.raw_url)).text() : f.content;
+  return JSON.parse(raw);
+}
+
+async function pushGist(token, gistId, payload) {
+  const body = JSON.stringify({
+    description: "Timeregnskap for prosjektoppgaven",
+    public: false,
+    files: { [GIST_FILE]: { content: JSON.stringify(payload, null, 2) } },
+  });
+  const g = gistId
+    ? await ghFetch("/gists/" + gistId, token, { method: "PATCH", body })
+    : await ghFetch("/gists", token, { method: "POST", body });
+  return g.id;
+}
+
+const klokke = () =>
+  new Date().toLocaleTimeString("nb-NO", { hour: "2-digit", minute: "2-digit" });
 
 const DEFAULT_CONFIG = {
   start: "2026-08-24",
@@ -147,52 +210,136 @@ export default function Timeplan() {
   const [loaded, setLoaded] = useState(false);
   const [status, setStatus] = useState("Laster …");
   const [showSettings, setShowSettings] = useState(false);
+  const [token, setToken] = useState("");
+  const [tokenDraft, setTokenDraft] = useState("");
+  const [sync, setSync] = useState({ state: "av", msg: "" });
+  const gistIdRef = useRef("");
 
-  /* last lagret tilstand */
+  const applyPayload = (s) => {
+    if (!s) return;
+    if (s.config) setConfig({ ...DEFAULT_CONFIG, ...s.config });
+    setPlanOverrides(s.planOverrides || {});
+    setActuals(s.actuals || {});
+    setTopics(s.topics || {});
+    setMilestones(s.milestones || {});
+  };
+
+  /* last lagret tilstand, og hent nyere sikkerhetskopi hvis den finnes */
   useEffect(() => {
     let alive = true;
     (async () => {
+      let local = null;
       try {
         const r = await window.storage.get(STORAGE_KEY);
-        if (alive && r && r.value) {
-          const s = JSON.parse(r.value);
-          if (s.config) setConfig({ ...DEFAULT_CONFIG, ...s.config });
-          if (s.planOverrides) setPlanOverrides(s.planOverrides);
-          if (s.actuals) setActuals(s.actuals);
-          if (s.topics) setTopics(s.topics);
-          if (s.milestones) setMilestones(s.milestones);
-        }
+        if (r && r.value) local = JSON.parse(r.value);
       } catch (e) {
-        /* ingen lagret tilstand ennå */
-      } finally {
-        if (alive) {
-          setLoaded(true);
-          setStatus("Lagres automatisk");
+        /* ingen lokal tilstand ennå */
+      }
+
+      const t = readLocal(TOKEN_KEY);
+      const gid = readLocal(GIST_KEY);
+      gistIdRef.current = gid;
+
+      let remote = null;
+      if (t && gid) {
+        if (alive) setSync({ state: "arbeider", msg: "Henter fra GitHub …" });
+        try {
+          remote = await pullGist(t, gid);
+        } catch (e) {
+          if (alive) setSync({ state: "feil", msg: e.message });
         }
       }
+      if (!alive) return;
+
+      const nyereUte =
+        remote &&
+        (!local ||
+          !local.updatedAt ||
+          String(remote.updatedAt || "") > String(local.updatedAt));
+      applyPayload(nyereUte ? remote : local);
+
+      setToken(t);
+      setTokenDraft(t);
+      if (t && remote)
+        setSync({
+          state: "ok",
+          msg: nyereUte
+            ? "Hentet sikkerhetskopi fra GitHub"
+            : "Lokal versjon er nyest",
+        });
+      else if (!t) setSync({ state: "av", msg: "" });
+
+      setLoaded(true);
+      setStatus("Lagres automatisk");
     })();
     return () => {
       alive = false;
     };
   }, []);
 
-  /* lagre ved endring */
+  /* lagre ved endring: alltid lokalt, og til GitHub hvis tilkoblet */
   useEffect(() => {
     if (!loaded) return;
     setStatus("Lagrer …");
     const t = setTimeout(async () => {
+      const payload = {
+        updatedAt: new Date().toISOString(),
+        config,
+        planOverrides,
+        actuals,
+        topics,
+        milestones,
+      };
       try {
-        await window.storage.set(
-          STORAGE_KEY,
-          JSON.stringify({ config, planOverrides, actuals, topics, milestones })
-        );
+        await window.storage.set(STORAGE_KEY, JSON.stringify(payload));
         setStatus("Lagret");
       } catch (e) {
-        setStatus("Kunne ikke lagre. Prøv en endring til.");
+        setStatus("Kunne ikke lagre lokalt. Prøv en endring til.");
       }
-    }, 500);
+      if (!token) return;
+      setSync({ state: "arbeider", msg: "Lagrer til GitHub …" });
+      try {
+        const id = await pushGist(token, gistIdRef.current, payload);
+        if (id && id !== gistIdRef.current) {
+          gistIdRef.current = id;
+          writeLocal(GIST_KEY, id);
+        }
+        setSync({ state: "ok", msg: "Sikkerhetskopiert " + klokke() });
+      } catch (e) {
+        setSync({ state: "feil", msg: e.message });
+      }
+    }, 1500);
     return () => clearTimeout(t);
-  }, [config, planOverrides, actuals, topics, milestones, loaded]);
+  }, [config, planOverrides, actuals, topics, milestones, loaded, token]);
+
+  const kobleTil = () => {
+    const t = tokenDraft.trim();
+    if (!t) return;
+    writeLocal(TOKEN_KEY, t);
+    setToken(t);
+    setSync({ state: "arbeider", msg: "Kobler til …" });
+  };
+
+  const kobleFra = () => {
+    writeLocal(TOKEN_KEY, "");
+    writeLocal(GIST_KEY, "");
+    gistIdRef.current = "";
+    setToken("");
+    setTokenDraft("");
+    setSync({ state: "av", msg: "" });
+  };
+
+  const hentNa = async () => {
+    if (!token || !gistIdRef.current) return;
+    setSync({ state: "arbeider", msg: "Henter …" });
+    try {
+      const remote = await pullGist(token, gistIdRef.current);
+      applyPayload(remote);
+      setSync({ state: "ok", msg: "Hentet fra GitHub " + klokke() });
+    } catch (e) {
+      setSync({ state: "feil", msg: e.message });
+    }
+  };
 
   const today = useMemo(() => {
     const n = new Date();
@@ -599,8 +746,12 @@ export default function Timeplan() {
             style={{ borderBottom: `1px solid ${C.rule}` }}
           >
             <h2 className="text-sm">Uke for uke</h2>
-            <span className="text-xs" style={{ color: C.faint }}>
+            <span
+              className="text-xs"
+              style={{ color: sync.state === "feil" ? C.behind : C.faint }}
+            >
               {status}
+              {sync.msg ? " · " + sync.msg : ""}
             </span>
           </div>
 
@@ -877,6 +1028,94 @@ export default function Timeplan() {
                 </span>
               </div>
 
+              <div
+                className="sm:col-span-2 pt-4"
+                style={{ borderTop: `1px solid ${C.rule}` }}
+              >
+                <h3 className="text-sm mb-1">Sikkerhetskopi til GitHub</h3>
+                <p className="text-xs mb-3" style={{ color: C.muted }}>
+                  Timene lagres i en privat gist på GitHub-kontoen din i tillegg
+                  til nettleseren. Da overlever de at nettleserdata tømmes eller
+                  at maskinen byttes. Du trenger et personal access token med
+                  gist-tilgang, uten utløpsdato.
+                </p>
+
+                {token ? (
+                  <div className="flex flex-wrap items-center gap-3">
+                    <span
+                      className="text-sm px-2 py-1 rounded"
+                      style={{
+                        background: "rgba(18,97,92,0.08)",
+                        color: C.actual,
+                      }}
+                    >
+                      Tilkoblet
+                    </span>
+                    {gistIdRef.current && (
+                      <a
+                        href={"https://gist.github.com/" + gistIdRef.current}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-sm underline"
+                        style={{ color: C.muted }}
+                      >
+                        Åpne gisten
+                      </a>
+                    )}
+                    <button
+                      onClick={hentNa}
+                      className="px-3 py-2 text-sm rounded"
+                      style={{ border: `1px solid ${C.rule}`, color: C.ink }}
+                    >
+                      Hent fra GitHub
+                    </button>
+                    <button
+                      onClick={kobleFra}
+                      className="px-3 py-2 text-sm rounded"
+                      style={{ border: `1px solid ${C.rule}`, color: C.muted }}
+                    >
+                      Koble fra
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap items-center gap-3">
+                    <input
+                      type="password"
+                      value={tokenDraft}
+                      placeholder="github_pat_… eller ghp_…"
+                      onChange={(e) => setTokenDraft(e.target.value)}
+                      className="py-1.5 px-2 rounded grow"
+                      style={{
+                        border: `1px solid ${C.rule}`,
+                        color: C.ink,
+                        minWidth: "240px",
+                      }}
+                    />
+                    <button
+                      onClick={kobleTil}
+                      className="px-3 py-2 text-sm rounded"
+                      style={{
+                        border: `1px solid ${C.actual}`,
+                        color: C.actual,
+                      }}
+                    >
+                      Koble til
+                    </button>
+                  </div>
+                )}
+
+                {sync.msg && (
+                  <p
+                    className="text-xs mt-2"
+                    style={{
+                      color: sync.state === "feil" ? C.behind : C.muted,
+                    }}
+                  >
+                    {sync.msg}
+                  </p>
+                )}
+              </div>
+
               <div className="flex flex-wrap items-end gap-3 sm:col-span-2">
                 <button
                   onClick={exportCsv}
@@ -912,7 +1151,7 @@ export default function Timeplan() {
         </section>
 
         <p className="text-xs mt-4" style={{ color: C.faint }}>
-          Timene lagres i nettleseren og er bare synlige for deg.
+          Timene lagres i nettleseren, og i en privat gist hvis du kobler til GitHub. De er bare synlige for deg.
         </p>
       </div>
     </div>
