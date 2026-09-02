@@ -14,7 +14,6 @@ Publisert på <https://kjethom.github.io/timeplan/>
   tyngdepunkt og bratthet
 - Timeføring per uke, med kumulativ sammenlikning mot planen
 - Én temalinje per uke, og markering av milepæler som vises på plankurven
-- Overstyring av enkeltuker (for eksempel 0 timer i reiseuka)
 - Nøkkeltall: ført, plan til i dag, avvik, gjenstående, og nødvendig snitt
   per uke for å komme i mål
 - CSV-eksport
