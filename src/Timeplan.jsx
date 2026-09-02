@@ -96,6 +96,33 @@ async function pushGist(token, gistId, payload) {
   return g.id;
 }
 
+const STATUSER = ["ny", "pagar", "ferdig"];
+const STATUS_TEKST = { ny: "Ikke start", pagar: "Pågår", ferdig: "Ferdig" };
+
+function StatusIkon({ status }) {
+  if (status === "ferdig")
+    return (
+      <svg width="13" height="13" viewBox="0 0 13 13" aria-hidden="true">
+        <circle cx="6.5" cy="6.5" r="5.5" fill="none" stroke={C.ahead} strokeWidth="1.4" />
+        <path d="M 3.8 6.6 L 5.6 8.4 L 9.2 4.6" fill="none" stroke={C.ahead}
+              strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    );
+  if (status === "pagar")
+    return (
+      <svg width="13" height="13" viewBox="0 0 13 13" aria-hidden="true">
+        <circle cx="6.5" cy="6.5" r="5.5" fill="none" stroke={C.now} strokeWidth="1.4" />
+        <path d="M 6.5 1 A 5.5 5.5 0 0 1 6.5 12 Z" fill={C.now} />
+      </svg>
+    );
+  return (
+    <svg width="13" height="13" viewBox="0 0 13 13" aria-hidden="true">
+      <circle cx="6.5" cy="6.5" r="5.5" fill="none" stroke={C.faint}
+              strokeWidth="1.4" strokeDasharray="2 2" />
+    </svg>
+  );
+}
+
 const klokke = () =>
   new Date().toLocaleTimeString("nb-NO", { hour: "2-digit", minute: "2-digit" });
 
@@ -214,6 +241,7 @@ export default function Timeplan() {
   const [actuals, setActuals] = useState({});
   const [topics, setTopics] = useState({});
   const [milestones, setMilestones] = useState({});
+  const [statuses, setStatuses] = useState({});
   const [loaded, setLoaded] = useState(false);
   const [status, setStatus] = useState("Laster …");
   const [showSettings, setShowSettings] = useState(false);
@@ -239,6 +267,7 @@ export default function Timeplan() {
     setActuals(s.actuals || {});
     setTopics(s.topics || {});
     setMilestones(s.milestones || {});
+    setStatuses(s.statuses || {});
   };
 
   /* last lagret tilstand, og hent nyere sikkerhetskopi hvis den finnes */
@@ -317,6 +346,7 @@ export default function Timeplan() {
         actuals,
         topics,
         milestones,
+        statuses,
       };
       try {
         await window.storage.set(STORAGE_KEY, JSON.stringify(payload));
@@ -349,7 +379,7 @@ export default function Timeplan() {
       }
     }, 1500);
     return () => clearTimeout(t);
-  }, [config, planOverrides, actuals, topics, milestones, loaded, token]);
+  }, [config, planOverrides, actuals, topics, milestones, statuses, loaded, token]);
 
   const kobleTil = async () => {
     const t = tokenDraft.trim();
@@ -410,6 +440,7 @@ export default function Timeplan() {
       actuals,
       topics,
       milestones,
+      statuses,
     };
     try {
       await pushGist(token, gistIdRef.current, payload);
@@ -476,6 +507,7 @@ export default function Timeplan() {
         actual: act,
         topic: topics[key] || "",
         milestone: !!milestones[key],
+        status: statuses[key] || "ny",
       };
     });
 
@@ -522,7 +554,7 @@ export default function Timeplan() {
       start,
       end: rows[N - 1].we,
     };
-  }, [config, planOverrides, actuals, topics, milestones, today]);
+  }, [config, planOverrides, actuals, topics, milestones, statuses, today]);
 
   const { rows, N, totalPlan, logged, planToDate, nowIdx, drawUntil } = model;
   const deviation = logged - planToDate;
@@ -530,6 +562,9 @@ export default function Timeplan() {
   const weeksLeft = nowIdx < 0 ? N : Math.max(0, N - nowIdx);
   const paceNeeded = weeksLeft > 0 ? remaining / weeksLeft : 0;
   const avgPlanned = N > 0 ? totalPlan / N : 0;
+  const pagaende = rows.filter(
+    (r) => r.i <= (nowIdx < 0 ? -1 : nowIdx) && r.status === "pagar"
+  ).length;
 
   const chartData = useMemo(() => {
     const head = {
@@ -578,6 +613,16 @@ export default function Timeplan() {
       return n;
     });
 
+  const nesteStatus = (key) =>
+    setStatuses((p) => {
+      const na = p[key] || "ny";
+      const ny = STATUSER[(STATUSER.indexOf(na) + 1) % STATUSER.length];
+      const n = { ...p };
+      if (ny === "ny") delete n[key];
+      else n[key] = ny;
+      return n;
+    });
+
   const toggleMilestone = (key) =>
     setMilestones((p) => {
       const n = { ...p };
@@ -588,13 +633,14 @@ export default function Timeplan() {
 
   const exportCsv = () => {
     const head =
-      "uke;fra;til;tema;milepæl;plan_timer;ført_timer;kum_plan;kum_ført\n";
+      "uke;fra;til;status;tema;milepæl;plan_timer;ført_timer;kum_plan;kum_ført\n";
     const body = rows
       .map((r) =>
         [
           r.uke,
           d2s(r.ws),
           d2s(r.we),
+          STATUS_TEKST[r.status],
           `"${String(r.topic).replace(/"/g, '""')}"`,
           r.milestone ? "ja" : "",
           nf(r.planned),
@@ -854,7 +900,7 @@ export default function Timeplan() {
 
         {/* nøkkeltall */}
         <section
-          className="grid grid-cols-2 sm:grid-cols-4 gap-5 p-4 sm:p-5 mb-5"
+          className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-5 p-4 sm:p-5 mb-5"
           style={{
             background: C.surface,
             border: `1px solid ${C.rule}`,
@@ -869,6 +915,11 @@ export default function Timeplan() {
             value={nf(paceNeeded)}
             unit="t/uke"
             tone={paceNeeded > avgPlanned * 1.25 ? C.behind : C.ink}
+          />
+          <Stat
+            label="Pågående oppgaver"
+            value={String(pagaende)}
+            tone={pagaende >= 3 ? C.behind : C.ink}
           />
         </section>
 
@@ -896,16 +947,17 @@ export default function Timeplan() {
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full text-sm" style={{ minWidth: "880px" }}>
+            <table className="w-full text-sm" style={{ minWidth: "1000px" }}>
               <thead>
                 <tr style={{ color: C.muted }}>
                   <th className="text-left font-normal px-4 sm:px-5 py-2 text-xs">
                     Uke
                   </th>
                   <th className="text-left font-normal py-2 text-xs">Dato</th>
+                  <th className="text-left font-normal py-2 text-xs">Status</th>
                   <th
                     className="text-left font-normal py-2 text-xs pr-3"
-                    style={{ width: "38%" }}
+                    style={{ width: "34%" }}
                   >
                     Tema
                   </th>
@@ -955,6 +1007,33 @@ export default function Timeplan() {
                       </td>
                       <td className="py-2 text-xs" style={{ color: C.muted }}>
                         {fmtDay(r.ws)}–{fmtDay(r.we)}
+                      </td>
+                      <td className="py-2 pr-2">
+                        <button
+                          onClick={() => nesteStatus(r.key)}
+                          title="Klikk for å bytte status"
+                          className="flex items-center gap-1.5 px-2 py-1 rounded w-full focus:ring-2"
+                          style={{
+                            border: `1px solid ${C.rule}`,
+                            background:
+                              r.status === "pagar"
+                                ? "rgba(185,139,29,0.10)"
+                                : r.status === "ferdig"
+                                ? "rgba(46,107,79,0.08)"
+                                : "transparent",
+                            color:
+                              r.status === "pagar"
+                                ? C.now
+                                : r.status === "ferdig"
+                                ? C.ahead
+                                : C.faint,
+                            fontSize: "12px",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          <StatusIkon status={r.status} />
+                          {STATUS_TEKST[r.status]}
+                        </button>
                       </td>
                       <td className="py-2 pr-3">
                         <div className="flex items-center gap-2">
@@ -1051,7 +1130,8 @@ export default function Timeplan() {
             Plan-feltet viser S-kurven som grå hjelpetekst. Skriv inn et tall for
             å overstyre en enkelt uke — for eksempel 0 i reiseuka eller i
             eksamensperioden. Klikk på romben for å merke en uke som milepæl;
-            den dukker opp på plankurven.
+            den dukker opp på plankurven. Statusknappen blar mellom ikke
+            startet, pågår og ferdig, og teller opp «Pågående oppgaver» over.
           </div>
         </section>
 
