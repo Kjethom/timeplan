@@ -69,6 +69,13 @@ async function ghFetch(path, token, options) {
   return res.json();
 }
 
+async function finnGist(token) {
+  const liste = await ghFetch("/gists?per_page=100", token);
+  const treff = (liste || []).filter((g) => g.files && g.files[GIST_FILE]);
+  treff.sort((a, b) => String(b.updated_at).localeCompare(String(a.updated_at)));
+  return { id: treff.length ? treff[0].id : "", antall: treff.length };
+}
+
 async function pullGist(token, gistId) {
   const g = await ghFetch("/gists/" + gistId, token);
   const f = g.files && g.files[GIST_FILE];
@@ -216,7 +223,14 @@ export default function Timeplan() {
   const gistIdRef = useRef("");
   const lastSyncedRef = useRef("");
   const conflictRef = useRef(false);
+  const [gistId, setGistIdVis] = useState("");
   const [conflict, setConflict] = useState(null);
+
+  const settGist = (id) => {
+    gistIdRef.current = id;
+    setGistIdVis(id);
+    writeLocal(GIST_KEY, id);
+  };
 
   const applyPayload = (s) => {
     if (!s) return;
@@ -240,8 +254,18 @@ export default function Timeplan() {
       }
 
       const t = readLocal(TOKEN_KEY);
-      const gid = readLocal(GIST_KEY);
+      let gid = readLocal(GIST_KEY);
+
+      if (t && !gid) {
+        try {
+          gid = (await finnGist(t)).id;
+        } catch (e) {
+          /* uten nett fortsetter vi lokalt */
+        }
+      }
       gistIdRef.current = gid;
+      if (alive) setGistIdVis(gid);
+      if (gid) writeLocal(GIST_KEY, gid);
 
       let remote = null;
       if (t && gid) {
@@ -317,10 +341,7 @@ export default function Timeplan() {
           }
         }
         const id = await pushGist(token, gistIdRef.current, payload);
-        if (id && id !== gistIdRef.current) {
-          gistIdRef.current = id;
-          writeLocal(GIST_KEY, id);
-        }
+        if (id && id !== gistIdRef.current) settGist(id);
         lastSyncedRef.current = payload.updatedAt;
         setSync({ state: "ok", msg: "Sikkerhetskopiert " + klokke() });
       } catch (e) {
@@ -330,18 +351,39 @@ export default function Timeplan() {
     return () => clearTimeout(t);
   }, [config, planOverrides, actuals, topics, milestones, loaded, token]);
 
-  const kobleTil = () => {
+  const kobleTil = async () => {
     const t = tokenDraft.trim();
     if (!t) return;
-    writeLocal(TOKEN_KEY, t);
-    setToken(t);
     setSync({ state: "arbeider", msg: "Kobler til …" });
+    try {
+      const { id, antall } = await finnGist(t);
+      if (id) {
+        settGist(id);
+        const remote = await pullGist(t, id);
+        applyPayload(remote);
+        lastSyncedRef.current = remote.updatedAt || "";
+        setSync({
+          state: antall > 1 ? "feil" : "ok",
+          msg:
+            antall > 1
+              ? "Fant " +
+                antall +
+                " sikkerhetskopier og brukte den sist endrede. Slett de andre på gist.github.com."
+              : "Fant eksisterende sikkerhetskopi og hentet timene",
+        });
+      } else {
+        setSync({ state: "ok", msg: "Ingen sikkerhetskopi funnet. Oppretter en ny." });
+      }
+      writeLocal(TOKEN_KEY, t);
+      setToken(t);
+    } catch (e) {
+      setSync({ state: "feil", msg: e.message });
+    }
   };
 
   const kobleFra = () => {
     writeLocal(TOKEN_KEY, "");
-    writeLocal(GIST_KEY, "");
-    gistIdRef.current = "";
+    settGist("");
     setToken("");
     setTokenDraft("");
     setSync({ state: "av", msg: "" });
@@ -1149,9 +1191,9 @@ export default function Timeplan() {
                     >
                       Tilkoblet
                     </span>
-                    {gistIdRef.current && (
+                    {gistId && (
                       <a
-                        href={"https://gist.github.com/" + gistIdRef.current}
+                        href={"https://gist.github.com/" + gistId}
                         target="_blank"
                         rel="noreferrer"
                         className="text-sm underline"
