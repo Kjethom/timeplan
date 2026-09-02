@@ -243,6 +243,7 @@ export default function Timeplan() {
   const [milestones, setMilestones] = useState({});
   const [statuses, setStatuses] = useState({});
   const chartRef = useRef(null);
+  const [visning, setVisning] = useState("hittil");
   const [loaded, setLoaded] = useState(false);
   const [status, setStatus] = useState("Laster …");
   const [showSettings, setShowSettings] = useState(false);
@@ -567,6 +568,11 @@ export default function Timeplan() {
     (r) => r.i <= (nowIdx < 0 ? -1 : nowIdx) && r.status === "pagar"
   ).length;
 
+  const vindu = useMemo(() => {
+    if (visning === "hele" || nowIdx < 0) return N;
+    return Math.min(nowIdx + 4, N);
+  }, [visning, nowIdx, N]);
+
   const chartData = useMemo(() => {
     const head = {
       label: "0",
@@ -575,7 +581,7 @@ export default function Timeplan() {
       ført: 0,
       milestone: false,
     };
-    const body = rows.map((r) => ({
+    const body = rows.slice(0, vindu).map((r) => ({
       label: String(r.uke),
       full:
         `Uke ${r.uke} · ${fmtDay(r.ws)}–${fmtDay(r.we)}` +
@@ -586,9 +592,14 @@ export default function Timeplan() {
       milestone: r.milestone,
     }));
     return [head, ...body];
-  }, [rows, drawUntil]);
+  }, [rows, drawUntil, vindu]);
 
-  const yMax = Math.max(totalPlan, logged) * 1.06 || 10;
+  const sisteIVindu = rows[vindu - 1];
+  const yTopp = Math.max(
+    sisteIVindu ? sisteIVindu.cumPlan : totalPlan,
+    ...rows.slice(0, vindu).map((r) => r.cumActual || 0)
+  );
+  const yMax = yTopp * 1.06 || 10;
 
   const setActual = (key, v) =>
     setActuals((p) => {
@@ -807,6 +818,29 @@ export default function Timeplan() {
             borderRadius: "4px",
           }}
         >
+          <div className="flex items-center gap-2 mb-3">
+            {[
+              ["hittil", "Hittil"],
+              ["hele", "Hele perioden"],
+            ].map(([v, tekst]) => (
+              <button
+                key={v}
+                onClick={() => setVisning(v)}
+                className="px-3 py-1 text-xs rounded"
+                style={{
+                  border: `1px solid ${visning === v ? C.actual : C.rule}`,
+                  background: visning === v ? "rgba(18,97,92,0.08)" : "transparent",
+                  color: visning === v ? C.actual : C.muted,
+                }}
+              >
+                {tekst}
+              </button>
+            ))}
+            <span className="ml-auto text-xs" style={{ color: C.faint }}>
+              Y-aksen går til {nf(Math.ceil(yMax / 10) * 10)} timer
+            </span>
+          </div>
+
           <div ref={chartRef} style={{ width: "100%", height: 340 }}>
             <ResponsiveContainer>
               <ComposedChart
