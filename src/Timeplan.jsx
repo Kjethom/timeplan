@@ -123,6 +123,19 @@ function StatusIkon({ status }) {
   );
 }
 
+function akseinndeling(topp) {
+  if (!topp || topp <= 0) return { max: 10, ticks: [0, 5, 10] };
+  const raa = topp / 6;
+  const mag = Math.pow(10, Math.floor(Math.log10(raa)));
+  const trinn =
+    [1, 2, 2.5, 5, 10].map((f) => f * mag).find((v) => v >= raa) || 10 * mag;
+  const max = Math.ceil(topp / trinn) * trinn;
+  const ticks = [];
+  for (let v = 0; v <= max + 1e-9; v += trinn)
+    ticks.push(Math.round(v * 100) / 100);
+  return { max, ticks };
+}
+
 const klokke = () =>
   new Date().toLocaleTimeString("nb-NO", { hour: "2-digit", minute: "2-digit" });
 
@@ -599,7 +612,7 @@ export default function Timeplan() {
     sisteIVindu ? sisteIVindu.cumPlan : totalPlan,
     ...rows.slice(0, vindu).map((r) => r.cumActual || 0)
   );
-  const yMax = yTopp * 1.06 || 10;
+  const akse = akseinndeling(yTopp);
 
   const setActual = (key, v) =>
     setActuals((p) => {
@@ -837,7 +850,7 @@ export default function Timeplan() {
               </button>
             ))}
             <span className="ml-auto text-xs" style={{ color: C.faint }}>
-              Y-aksen går til {nf(Math.ceil(yMax / 10) * 10)} timer
+              Y-aksen går til {nf(akse.max)} timer
             </span>
           </div>
 
@@ -847,7 +860,7 @@ export default function Timeplan() {
                 data={chartData}
                 margin={{ top: 8, right: 8, bottom: 4, left: -12 }}
               >
-                <CartesianGrid stroke={C.rule} strokeDasharray="0" vertical={false} />
+                <CartesianGrid stroke={C.rule} vertical={false} />
                 <XAxis
                   dataKey="label"
                   tick={{ fill: C.muted, fontSize: 11 }}
@@ -858,7 +871,8 @@ export default function Timeplan() {
                 />
                 <YAxis
                   yAxisId="cum"
-                  domain={[0, Math.ceil(yMax / 10) * 10]}
+                  domain={[0, akse.max]}
+                  ticks={akse.ticks}
                   tick={{ fill: C.muted, fontSize: 11 }}
                   tickLine={false}
                   axisLine={false}
