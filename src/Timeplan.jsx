@@ -243,7 +243,7 @@ export default function Timeplan() {
   const [milestones, setMilestones] = useState({});
   const [statuses, setStatuses] = useState({});
   const chartRef = useRef(null);
-  const [visning, setVisning] = useState("hittil");
+  const [visning, setVisning] = useState("hele");
   const [loaded, setLoaded] = useState(false);
   const [status, setStatus] = useState("Laster …");
   const [showSettings, setShowSettings] = useState(false);
@@ -820,8 +820,8 @@ export default function Timeplan() {
         >
           <div className="flex items-center gap-2 mb-3">
             {[
-              ["hittil", "Hittil"],
               ["hele", "Hele perioden"],
+              ["hittil", "Hittil"],
             ].map(([v, tekst]) => (
               <button
                 key={v}
