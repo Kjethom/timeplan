@@ -58,8 +58,7 @@ Under «Endre oppsett» kan du koble til et personal access token med
 nettleseren.
 
 Tokenet lages under Settings → Developer settings → Personal access tokens →
-Tokens (classic). Huk av `gist` og ingenting annet, og velg «No expiration» —
-ellers slutter lagringen å virke midt i semesteret.
+Tokens (classic). Huk av `gist` og ingenting annet. 
 
 Slik oppfører det seg:
 
@@ -77,7 +76,7 @@ ikke bare denne.
 ## Flere enheter
 
 Samme token på flere enheter gir samme gist. Konfliktsjekken hindrer stille
-overskriving, men den løser ikke opp i to versjoner for deg — du må velge én.
+overskriving, men den løser ikke opp i to versjoner for deg - du må velge én.
 
 Last siden på nytt før du fører timer hvis du har brukt en annen enhet siden
 sist. Da skriver du oppå riktig grunnlag.
