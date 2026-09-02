@@ -3,7 +3,6 @@ import {
   ComposedChart,
   Line,
   Area,
-  Bar,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -148,7 +147,6 @@ export default function Timeplan() {
   const [loaded, setLoaded] = useState(false);
   const [status, setStatus] = useState("Laster …");
   const [showSettings, setShowSettings] = useState(false);
-  const [showBars, setShowBars] = useState(true);
 
   /* last lagret tilstand */
   useEffect(() => {
@@ -298,7 +296,6 @@ export default function Timeplan() {
       full: "Start",
       plan: 0,
       ført: 0,
-      uketimer: null,
       milestone: false,
     };
     const body = rows.map((r) => ({
@@ -309,7 +306,6 @@ export default function Timeplan() {
       plan: Math.round(r.cumPlan * 10) / 10,
       ført:
         r.i <= drawUntil ? Math.round(r.cumActual * 10) / 10 : null,
-      uketimer: r.actual,
       milestone: r.milestone,
     }));
     return [head, ...body];
@@ -457,12 +453,6 @@ export default function Timeplan() {
                   axisLine={false}
                   width={48}
                 />
-                <YAxis
-                  yAxisId="week"
-                  orientation="right"
-                  hide
-                  domain={[0, "dataMax"]}
-                />
                 <Tooltip
                   contentStyle={{
                     background: C.surface,
@@ -479,16 +469,6 @@ export default function Timeplan() {
                       : [`${nf(v)} t`, name]
                   }
                 />
-                {showBars && (
-                  <Bar
-                    yAxisId="week"
-                    dataKey="uketimer"
-                    name="Timer denne uka"
-                    fill={C.actual}
-                    fillOpacity={0.16}
-                    barSize={12}
-                  />
-                )}
                 <Area
                   yAxisId="cum"
                   type="monotone"
@@ -582,14 +562,6 @@ export default function Timeplan() {
               </svg>
               Milepæl
             </span>
-            <label className="flex items-center gap-2 ml-auto cursor-pointer">
-              <input
-                type="checkbox"
-                checked={showBars}
-                onChange={(e) => setShowBars(e.target.checked)}
-              />
-              Vis timer per uke
-            </label>
           </div>
         </section>
 
