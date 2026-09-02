@@ -12,8 +12,8 @@ Publisert på <https://kjethom.github.io/timeplan/>
 
 - S-kurve generert fra startdato, frist og timebudsjett, med justerbart
   tyngdepunkt og bratthet
-- Timeføring per uke, med kumulativ sammenlikning mot planen
-- Én temalinje per uke, og markering av milepæler som vises på plankurven
+- Timeføring per uke, med sammenlikning mot planen
+- Én temalinje per uke, og markering av milepæler som kan vises på plankurven
 - Nøkkeltall: ført, plan til i dag, avvik, gjenstående, og nødvendig snitt
   per uke for å komme i mål
 - CSV-eksport
@@ -47,12 +47,11 @@ dette kan trygt være offentlig.
 
 Det betyr også at data er knyttet til én nettleser på én maskin. Tømmer du
 nettleserdata, forsvinner timene. Safari sletter dessuten data fra nettsteder
-du ikke har besøkt på sju dager, så bruk Chrome, eller legg siden til på
-hjemskjermen.
+du ikke har besøkt på sju dager.
 
-Bruk CSV-eksporten jevnlig, eller slå på sikkerhetskopi.
+Bruk CSV-eksporten jevnlig, eller slå på sikkerhetskopi for å unngå å miste timeføring.
 
-### Sikkerhetskopi til GitHub Gist
+### Sikkerhetskopi til GitHub Gist (Anbefalt)
 
 Under «Endre oppsett» kan du koble til et personal access token med
 `gist`-tilgang. Da lagres hele timeregnskapet i en privat gist i tillegg til
