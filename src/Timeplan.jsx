@@ -242,6 +242,7 @@ export default function Timeplan() {
   const [topics, setTopics] = useState({});
   const [milestones, setMilestones] = useState({});
   const [statuses, setStatuses] = useState({});
+  const chartRef = useRef(null);
   const [loaded, setLoaded] = useState(false);
   const [status, setStatus] = useState("Laster …");
   const [showSettings, setShowSettings] = useState(false);
@@ -631,6 +632,57 @@ export default function Timeplan() {
       return n;
     });
 
+  const lastNed = (innhold, type, filnavn) => {
+    const url = URL.createObjectURL(new Blob([innhold], { type }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filnavn;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const filnavn = (endelse) =>
+    "s-diagram-" + new Date().toISOString().slice(0, 10) + "." + endelse;
+
+  const exportSvg = () => {
+    const kilde = chartRef.current && chartRef.current.querySelector("svg");
+    if (!kilde) return;
+    const svg = kilde.cloneNode(true);
+
+    const b = kilde.getBoundingClientRect();
+    const bredde = Math.round(b.width) || 900;
+    const hoyde = Math.round(b.height) || 340;
+    svg.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+    svg.setAttribute("width", bredde);
+    svg.setAttribute("height", hoyde);
+    if (!svg.getAttribute("viewBox"))
+      svg.setAttribute("viewBox", `0 0 ${bredde} ${hoyde}`);
+
+    // Recharts tegner den skjulte serien for tomme uker; den skal ikke med
+    svg.querySelectorAll(".recharts-tooltip-wrapper").forEach((n) => n.remove());
+
+    // hvit bunn, ellers blir figuren gjennomsiktig i Word
+    const bunn = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    bunn.setAttribute("width", "100%");
+    bunn.setAttribute("height", "100%");
+    bunn.setAttribute("fill", "#FFFFFF");
+    svg.insertBefore(bunn, svg.firstChild);
+
+    // skriften må navngis i fila, den arver ikke fra siden
+    const stil = document.createElementNS("http://www.w3.org/2000/svg", "style");
+    stil.textContent =
+      "text{font-family:Helvetica,Arial,sans-serif;font-size:11px;fill:" +
+      C.muted +
+      "}";
+    svg.insertBefore(stil, svg.firstChild);
+
+    lastNed(
+      '<?xml version="1.0" encoding="UTF-8"?>\n' + svg.outerHTML,
+      "image/svg+xml;charset=utf-8",
+      filnavn("svg")
+    );
+  };
+
   const exportCsv = () => {
     const head =
       "uke;fra;til;status;tema;milepæl;plan_timer;ført_timer;kum_plan;kum_ført\n";
@@ -650,15 +702,7 @@ export default function Timeplan() {
         ].join(";")
       )
       .join("\n");
-    const blob = new Blob([head + body], {
-      type: "text/csv;charset=utf-8",
-    });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "timeliste.csv";
-    a.click();
-    URL.revokeObjectURL(url);
+    lastNed(head + body, "text/csv;charset=utf-8", "timeliste.csv");
   };
 
   const devTone = deviation < -0.05 ? C.behind : deviation > 0.05 ? C.ahead : C.ink;
@@ -763,7 +807,7 @@ export default function Timeplan() {
             borderRadius: "4px",
           }}
         >
-          <div style={{ width: "100%", height: 340 }}>
+          <div ref={chartRef} style={{ width: "100%", height: 340 }}>
             <ResponsiveContainer>
               <ComposedChart
                 data={chartData}
@@ -895,6 +939,13 @@ export default function Timeplan() {
               </svg>
               Milepæl
             </span>
+            <button
+              onClick={exportSvg}
+              className="ml-auto px-2 py-1 rounded"
+              style={{ border: `1px solid ${C.rule}`, color: C.muted }}
+            >
+              Last ned diagram (SVG)
+            </button>
           </div>
         </section>
 
