@@ -858,9 +858,9 @@ export default function Timeplan() {
             <ResponsiveContainer>
               <ComposedChart
                 data={chartData}
-                margin={{ top: 8, right: 8, bottom: 4, left: -12 }}
+                margin={{ top: 22, right: 8, bottom: 4, left: -12 }}
               >
-                <CartesianGrid stroke={C.rule} vertical={false} />
+                <CartesianGrid yAxisId="cum" stroke={C.rule} vertical={false} />
                 <XAxis
                   dataKey="label"
                   tick={{ fill: C.muted, fontSize: 11 }}
