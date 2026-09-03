@@ -123,16 +123,23 @@ function StatusIkon({ status }) {
   );
 }
 
+/**
+ * Aksen slutter nøyaktig på toppverdien, med runde delestreker på veien opp.
+ * Den øverste streken blir dermed ofte kortere enn de andre — det er prisen
+ * for å slippe tom luft over kurven.
+ */
 function akseinndeling(topp) {
   if (!topp || topp <= 0) return { max: 10, ticks: [0, 5, 10] };
   const raa = topp / 6;
   const mag = Math.pow(10, Math.floor(Math.log10(raa)));
   const trinn =
     [1, 2, 2.5, 5, 10].map((f) => f * mag).find((v) => v >= raa) || 10 * mag;
-  const max = Math.ceil(topp / trinn) * trinn;
+
+  const max = Math.round(topp * 100) / 100;
   const ticks = [];
-  for (let v = 0; v <= max + 1e-9; v += trinn)
+  for (let v = 0; v < max - trinn * 0.35; v += trinn)
     ticks.push(Math.round(v * 100) / 100);
+  ticks.push(max);
   return { max, ticks };
 }
 
