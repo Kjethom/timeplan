@@ -124,20 +124,17 @@ function StatusIkon({ status }) {
 }
 
 /**
- * Runde delestreker opp mot toppen. Med eksakt=true slutter aksen nøyaktig på
- * toppverdien, slik at det ikke blir tom luft over kurven; den øverste streken
- * blir da ofte kortere enn de andre. Ellers rundes toppen opp til et helt trinn.
+ * Runde delestreker med jevn avstand hele veien. Toppen rundes opp til et helt
+ * trinn, så aksen kan ende litt over kurven.
  */
-function akseinndeling(topp, eksakt) {
+function akseinndeling(topp) {
   if (!topp || topp <= 0) return { max: 10, ticks: [0, 5, 10] };
   const raa = topp / 6;
   const mag = Math.pow(10, Math.floor(Math.log10(raa)));
   const trinn =
     [1, 2, 2.5, 5, 10].map((f) => f * mag).find((v) => v >= raa) || 10 * mag;
 
-  const max = eksakt
-    ? Math.round(topp * 100) / 100
-    : Math.ceil(topp / trinn) * trinn;
+  const max = Math.ceil(topp / trinn) * trinn;
   const ticks = [];
   for (let v = 0; v < max - trinn * 0.35; v += trinn)
     ticks.push(Math.round(v * 100) / 100);
@@ -621,7 +618,7 @@ export default function Timeplan() {
     sisteIVindu ? sisteIVindu.cumPlan : totalPlan,
     ...rows.slice(0, vindu).map((r) => r.cumActual || 0)
   );
-  const akse = akseinndeling(yTopp, visning === "hele");
+  const akse = akseinndeling(yTopp);
 
   const setActual = (key, v) =>
     setActuals((p) => {
