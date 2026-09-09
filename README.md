@@ -16,8 +16,28 @@ Publisert på <https://kjethom.github.io/timeplan/>
 - Én temalinje per uke, og markering av milepæler som kan vises på plankurven
 - Nøkkeltall: ført, plan til i dag, avvik, gjenstående, og nødvendig snitt
   per uke for å komme i mål
+- Statusvisning for presentasjon: en forenklet, skjermbildevennlig flate til
+  veiledningsmøter
 - CSV-eksport
 - Valgfri sikkerhetskopi til en privat GitHub Gist
+
+## Statusvisning for presentasjon
+
+Knappen «Statusvisning for presentasjon» øverst i timeføringen bytter til en
+forenklet flate laget for å vises fram, f.eks. i et veiledningsmøte.
+
+Den viser:
+
+- S-kurven med plan og ført, uten redigeringskontrollene fra
+  timeføringsvisningen
+- Avvik fra plan, ført så langt, plan til i dag, gjenstående timer og
+  nødvendig snitt per uke for resten av perioden
+- Temaer gruppert etter status: Ferdig, Pågår og hva som starter før neste
+  milepæl (eller snart, hvis ingen milepæl er satt)
+
+Visningen er ren tekst og grafikk uten interaktive elementer, og egner seg
+til å ta skjermbilde av (Cmd+Shift+4 på Mac) eller dele skjerm direkte fra.
+«Tilbake til timeføring» fører deg tilbake til redigeringsvisningen.
 
 ## Oppsett
 
