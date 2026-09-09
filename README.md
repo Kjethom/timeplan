@@ -39,7 +39,7 @@ Visningen er ren tekst og grafikk uten interaktive elementer, og egner seg
 til å ta skjermbilde av (Cmd+Shift+4 på Mac) eller dele skjerm direkte fra.
 «Tilbake til timeføring» fører deg tilbake til redigeringsvisningen.
 
-## Oppsett
+## Oppsett for lokal versjon uten Github Pages
 
 Krever Node 22 eller nyere.
 
