@@ -263,6 +263,7 @@ export default function Timeplan() {
   const [statuses, setStatuses] = useState({});
   const chartRef = useRef(null);
   const [visning, setVisning] = useState("hele");
+  const [statusvisning, setStatusvisning] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [status, setStatus] = useState("Laster …");
   const [showSettings, setShowSettings] = useState(false);
@@ -592,6 +593,22 @@ export default function Timeplan() {
     return Math.min(nowIdx + 4, N);
   }, [visning, nowIdx, N]);
 
+  const statusLister = useMemo(() => {
+    const na = nowIdx < 0 ? -1 : nowIdx;
+    const nesteMilepael = rows.find((r) => r.i > na && r.milestone);
+    const horisont = nesteMilepael ? nesteMilepael.i : Math.min(na + 3, N - 1);
+    const med = (r) => r.topic && r.topic.trim();
+    return {
+      ferdig: rows.filter((r) => r.status === "ferdig" && med(r)),
+      pagar: rows.filter((r) => r.status === "pagar" && med(r)),
+      kommer: rows.filter(
+        (r) => r.i > na && r.i <= horisont && r.status !== "ferdig" && med(r)
+      ),
+      frist: nesteMilepael ? nesteMilepael.we : rows[Math.min(na + 3, N - 1)]?.we,
+      milepael: !!nesteMilepael,
+    };
+  }, [rows, nowIdx, N]);
+
   const chartData = useMemo(() => {
     const head = {
       label: "0",
@@ -737,6 +754,124 @@ export default function Timeplan() {
 
   const devTone = deviation < -0.05 ? C.behind : deviation > 0.05 ? C.ahead : C.ink;
 
+
+  const Liste = ({ tittel, poster, farge, tom }) => (
+    <div className="flex-1" style={{ minWidth: 0 }}>
+      <h3
+        className="text-xs mb-2 pb-1"
+        style={{ color: farge, borderBottom: `1px solid ${C.rule}` }}
+      >
+        {tittel}
+      </h3>
+      {poster.length === 0 ? (
+        <p className="text-xs" style={{ color: C.faint }}>
+          {tom}
+        </p>
+      ) : (
+        <ul className="space-y-1.5">
+          {poster.slice(0, 6).map((r) => (
+            <li key={r.key} className="text-xs leading-snug" style={{ color: C.ink }}>
+              <span style={{ color: C.faint }}>U{r.uke}</span> {r.topic}
+            </li>
+          ))}
+          {poster.length > 6 && (
+            <li className="text-xs" style={{ color: C.faint }}>
+              + {poster.length - 6} til
+            </li>
+          )}
+        </ul>
+      )}
+    </div>
+  );
+
+  if (statusvisning)
+    return (
+      <div className="w-full min-h-screen p-5 sm:p-8" style={{ background: C.paper, color: C.ink, fontFamily: "'Inter', 'Helvetica Neue', Helvetica, Arial, system-ui, sans-serif" }}>
+        <div className="mx-auto" style={{ maxWidth: "1280px" }}>
+          <div className="flex items-center gap-3 mb-3">
+            <button
+              onClick={() => setStatusvisning(false)}
+              className="px-3 py-1.5 text-sm rounded"
+              style={{ border: `1px solid ${C.rule}`, color: C.ink, background: C.surface }}
+            >
+              Tilbake til timeføring
+            </button>
+            <span className="text-xs" style={{ color: C.faint }}>
+              Ta skjermbilde av flaten under (Cmd+Shift+4 på Mac)
+            </span>
+          </div>
+
+          <div
+            className="p-8"
+            style={{ background: C.surface, border: `1px solid ${C.rule}`, borderRadius: "4px" }}
+          >
+            <div className="flex items-end justify-between gap-6 mb-6">
+              <div>
+                <h1 className="text-2xl" style={{ letterSpacing: "-0.015em" }}>
+                  Prosjektoppgave · status
+                </h1>
+                <p className="text-sm mt-1" style={{ color: C.muted }}>
+                  {nowIdx >= 0
+                    ? `Uke ${rows[nowIdx].uke} · ${fmtDay(rows[nowIdx].ws)}${fmtDay(rows[nowIdx].we)}`
+                    : "Ikke startet"}{" "}
+                  · {nf(totalPlan)} timer planlagt over {N} uker
+                </p>
+              </div>
+              <div className="text-right">
+                <div className="text-xs" style={{ color: C.muted }}>
+                  Avvik fra plan
+                </div>
+                <div
+                  className="text-4xl"
+                  style={{ color: devTone, fontVariantNumeric: "tabular-nums", letterSpacing: "-0.03em" }}
+                >
+                  {signed(deviation)}
+                  <span className="text-lg ml-1" style={{ color: C.faint }}>t</span>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ width: "100%", height: 260 }}>
+              <ResponsiveContainer>
+                <ComposedChart data={chartData} margin={{ top: 10, right: 8, bottom: 0, left: -12 }}>
+                  <CartesianGrid yAxisId="cum" stroke={C.rule} vertical={false} />
+                  <XAxis dataKey="label" tick={{ fill: C.muted, fontSize: 11 }} tickLine={false} axisLine={{ stroke: C.rule }} interval="preserveStartEnd" minTickGap={8} />
+                  <YAxis yAxisId="cum" domain={[0, akse.max]} ticks={akse.ticks} tick={{ fill: C.muted, fontSize: 11 }} tickLine={false} axisLine={false} width={48} />
+                  <Line yAxisId="cum" type="monotone" dataKey="plan" name="Plan" stroke={C.plan} strokeWidth={2} strokeDasharray="5 4" dot={<MilestoneDot />} activeDot={false} isAnimationActive={false} />
+                  <Line yAxisId="cum" type="monotone" dataKey="ført" name="Ført" stroke={C.actual} strokeWidth={2.4} dot={false} connectNulls={false} isAnimationActive={false} />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+
+            <div
+              className="grid grid-cols-4 gap-6 py-5 my-5"
+              style={{ borderTop: `1px solid ${C.rule}`, borderBottom: `1px solid ${C.rule}` }}
+            >
+              <Stat label="Ført så langt" value={nf(logged)} unit="t" />
+              <Stat label="Plan til i dag" value={nf(planToDate)} unit="t" />
+              <Stat label="Gjenstår" value={nf(remaining)} unit="t" />
+              <Stat label={`Nødvendig snitt (${weeksLeft} uker igjen)`} value={nf(paceNeeded)} unit="t/uke" tone={paceNeeded > avgPlanned * 1.25 ? C.behind : C.ink} />
+            </div>
+
+            <div className="flex gap-8">
+              <Liste tittel="Ferdig" poster={statusLister.ferdig} farge={C.ahead} tom="Ingenting merket ferdig ennå" />
+              <Liste tittel="Pågår" poster={statusLister.pagar} farge={C.now} tom="Ingenting pågår" />
+              <Liste
+                tittel={
+                  statusLister.frist
+                    ? `Starter før ${fmtDay(statusLister.frist)}${statusLister.milepael ? " (milepæl)" : ""}`
+                    : "Starter snart"
+                }
+                poster={statusLister.kommer}
+                farge={C.muted}
+                tom="Ingen temaer lagt inn"
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+
   return (
     <div
       className="w-full min-h-screen p-5 sm:p-8"
@@ -749,6 +884,16 @@ export default function Timeplan() {
     >
       <div className="mx-auto" style={{ maxWidth: "1000px" }}>
         {/* topp */}
+        <div className="flex justify-end mb-3">
+          <button
+            onClick={() => setStatusvisning(true)}
+            className="px-3 py-1.5 text-sm rounded"
+            style={{ border: `1px solid ${C.rule}`, color: C.ink, background: C.surface }}
+          >
+            Statusvisning for presentasjon
+          </button>
+        </div>
+
         <header className="flex flex-wrap items-end justify-between gap-6 mb-6">
           <div>
             <h1
